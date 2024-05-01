@@ -1,0 +1,340 @@
+.TH D22 1  "14 March 2023" "\e0" "GUTS"
+.SH NAME
+d22 \- The shell\-based d22 build utility
+.SH SYNOPSIS
+.B d22
+[\fIOPTIONS\fR]... [\fITARGET\fR]
+.SH DESCRIPTION
+.LP
+The
+.I d22
+utility is designed to offer the features of other build automation tools, such as
+.IR make(1) ,
+while giving developers access to all the power of the shell, and standard utilities. This
+allows developers to incorporate configuration, and other arbitrary functionality, directly
+into the build scripts for their projects.
+.LP
+Much like
+.BR make ,
+.B d22
+allows a developer to specify targets to be built/executed. These targets are specified using
+a
+.B build22
+file. When run
+.B d22
+will search the current directory for this file, and build the specified target, or, if no
+target is given, the 
+.B default
+target. Targets are specified within the
+.B build22
+file by declaring a shell function with the name \fBtarget_[\fR\fITARGET_NAME\fR\fB]\fR.
+For example, the default target may be declared as:
+.LP
+\fItarget_default\fR(){
+.RS
+    ...
+.RE
+}
+.LP
+The target functions used by
+.B d22
+may contain any valid shell commands (following POSIX conventions is recommended for
+compatibility), or any functions provided by
+.B d22
+itself, and may accept agruments. The
+.B build22
+file may contain any aditional shell code required for configuration, or build setup, and
+may source, or execute, any other program or script that does not conflict with any
+provided d22 functionality.
+.LP
+.B NOTE:
+At this time, 
+.B d22
+doesn't make use of the ability to pass arguments to targets. However, this may be subject
+to change in future versions.
+.SH OPTIONS
+.LP
+As of the current release,
+.B d22
+doesn't support any arguments, besides the target to be built. This is subject to change in
+future versions.
+.LP
+ \-Luna
+.SH CONFIGURATION
+.LP
+.B d22
+relies on the presence of either a global configuration at \fB/etc/d22rc\fR, or a local
+configuration at \fI$HOME\fR\fB/.d22rc\fR. If both files are present, both will be 
+sourced, with the local configuration taking precedence.
+.LP
+Currently, d22 supports a number of configuration options:
+.LP
+.B CC_PREF
+.br
+.RS 2
+Sets the prefered compiler. If CC is not explicitly set, either in the configuration,
+or when the utility is run, then this will be the compiler that
+.B d22
+uses. This should be set in the
+.B d22rc
+configuration.
+.RE
+.LP
+.B CC
+.br
+.RS 2
+Sets the compiler to be used. This should be used to override
+.B CC_PREF
+if a specific compiler is desired.
+.LP
+.B CAUTION:
+Using this directly in a configuration is not recommended, as it will override all other
+attempts to set the value. Use
+.B CC_PREF
+ instead.
+.RE
+.LP
+.B OPTS
+.br
+.RS 2
+Sets the default arguments to be passed to the compiler.
+.RE
+.LP
+.B LINKER
+.br
+.RS 2
+This sets the program to use when linking objects into a final binary. It defaults to
+the same value as \fICC\fR, but can be overridden if and alternate linker is required.
+.RE
+.LP
+.B JOB_MAX
+.br
+.RS 2
+This is the maximum number of concurrent jobs that d22 may start while bulding source
+files.
+.RE
+.LP
+.B NOALIAS
+.br
+.RS 2
+Setting this option will diable d22's internal aliases. This may be useful for debugging,
+or some special cases, but shouldn't normally be used.
+.RE
+.LP
+.B SILENT
+.br
+.RS 2
+Setting this sets d22 to silent mode. Only critical errors will be shown.
+.RE
+.LP
+.SH BUILT\-IN FUNCTIONS AND VALUES
+.LP
+The following are the built\-in functions and aliases provided by
+.B d22
+for use in constructing useful build targets:
+.LP
+.I is_function \fB[NAME]\fR
+.br
+.RS 2
+Used to test if
+.B NAME
+refers to a shell function. This is mainly used internally, but is also provided for
+general use.
+.RE
+.LP
+.I emit \fB...\fR
+.br
+.I emit_warning \fB...\fR
+.br
+.I emit_error \fB...\fR
+.br
+.RS 2
+These functions are used in place of \fIecho\fR. The \fIemit\fR and \fIemit_warning\fR
+functions will respect the value of \fBSILENT\fR, while \fIemit_error\fR will always
+produce an output. The \fIemit\fR function outputs to stdout, while \fIemit_warning\fR
+and \fIemit_error\fR output to stderr.
+.RE
+.LP
+.I array_index \fB[NAME] [INDEX] ... [VALUE]\fR 
+.br
+.I array_put \fB[NAME] [INDEX] [VALUE]\fR
+.RS 2
+Access the \fBNAME[INDEX]\fR element of an array.
+.br
+The value of \fBNAME\fR should be the name of the array being accessed.
+.br
+The value of \fBINDEX\fR should be the integer index, starting from 0, into the array.
+.br
+The argument \fBVALUE\fR should be the value to replace/set the current value of
+\fBNAME[INDEX]\fR.
+.LP
+If called with only the arguments of \fBNAME\fR and \fBINDEX\fR \fIarray_index\fR will
+echo the current value of \fBNAME[INDEX]\fR. If called with the optional argument of 
+\fBVALUE\fR the current value of \fBNAME[INDEX]\fR will be echoed, then replaced with
+\fBVALUE\fR. If an attempt is made to set an element with an \fBINDEX\fR greater than the
+index of the last element, the item will be added at the end of the array.
+.LP
+The \fIarray_put\fR function is the same as \fIarray_index\fR, except that it requires the
+\fBVALUE\fR argument, and produces no output.
+.LP
+.B Note:
+Because POSIX doesn't specify arrays for shells, they have been implemented in d22 using
+standard utilities. Due to these limitations, newlines are used to delimit array elements.
+Items containing newlines will be split into seperate elements.
+.RE
+.LP
+.I array_drop \fB[NAME] [INDEX]\fR
+.br
+.RS 2
+Drop the \fBNAME[INDEX]\fR element from and array.
+.br
+This is different from setting an element to an empty value, as using \fIarray_drop\fR will
+cause the item to be removed, and the remaining elements to take its place.
+.LP
+Produces no output.
+.RE
+.LP
+.I array_count \fB[NAME]\fR
+.br
+.RS 2
+Print the number of elements in array \fBNAME\fR.
+.RE
+.LP
+.I stack_push \fB[NAME] [VALUE]\fR
+.br
+.RS 2
+Push \fBVALUE\fR to stack \fBNAME\fR.
+.LP
+.B Note:
+The d22 stacks share many details with arrays. This means the same functions may be used
+on either.
+.RE
+.LP
+.I stack_pop \fB[NAME]\fR
+.br
+.I stack_get \fB[NAME]\fR
+.br
+.RS 2
+The \fIstack_pop\fR function will pop an item off the top of the stack \fBNAME\fR.
+.br
+Both functions will print the top item of the stack, but \fIstack_get\fR has no further
+effect.
+.RE
+.LP
+.I add_source \fB[SOURCE] [OBJECT]\fR 
+.br
+.I add_source \fB(\-o|\-O) [ARGS] [SOURCE] [OBJECT]\fR 
+.br
+.RS 2
+Add a source file to the current target.
+.br
+The \fBSOURCE\fR argument should refer to the source file to be compiled.
+.br
+The \fBOBJECT\fR argument should refer to the final object file to be output after
+\fBSOURCE\fR has been compiled.
+.LP
+If either \fB\-o\fR or \fB\-O\fR are specified as the first argument the second argument
+should be a space seperated list of arguments to be passed to the compiler. The \fB\-o\fR
+option appends \fBARGS\fR to the arguments specified by \fBOPTS\fR. If \fB\-O\fR is used
+\fBARGS\fR will override \fBOPTS\fR.
+.RE
+.LP
+.I wants_target \fB[TARGET]\fR
+.br
+.I requires_target \fB[TARGET]\fR
+.br
+.RS 2
+Adds the build target specified by \fBTARGET\fR to the dependency list of the current
+target.
+.br
+The \fIwants_target\fR function adds a target as a desired dependency that may fail. This
+is most useful for libraries which contain optional modules that may not compile in all
+environments.
+.br
+The \fIrequires_target\fR function adds a target as a required dependency. If a required
+dependency fails to compile the compile operation will fail.
+.RE
+.LP
+.I build_stack
+.br
+.RS 2
+Recursively execute and build the sources for the current target, and all its
+dependencies.
+.br
+Only compiles sources who's objects are missing, or that are newer than the existing
+object.
+.br
+Will execute, at most, \fBJOB_MAX\fR compilation jobs at once.
+.LP
+.B Note:
+Timestamp comparisons assume the shell supports this feature. Most do, but this is the
+only (as of this writing) non-POSIX feature that
+.B d22
+relies on. If not supported,
+.B d22
+will assume that all sources must be recompiled.
+.RE
+.LP
+.I link_stack \fB[OBJECT] ... [ARGS]\fR
+.br
+.RS 2
+Links all the object files in the current build stack into the final output file
+\fBOBJECT\fR using \fBLINKER\fR.
+.br
+The value of \fBARGS\fR should be a space separated list of arguments to be passed to
+\fBLINKER\fR.
+.LP
+Does nothing if a target is called for cleanup (See below).
+.RE
+.LP
+.I clean_objects
+.br
+.RS 2
+Cleans up all the objects associated with the current target and its dependencies.
+.LP
+.B Note:
+The \fIbuild_stack\fR and \fIlink_stack\fR functions will modify the environmental
+variables used by this function!
+.br
+The correct way to use this function is to create a seperate cleanup target and add any
+targets to be cleaned as dependencies.
+.br
+Care should be taken to ensure targets called during cleanup don't try to perform any
+operations which might interfere with the cleanup process. See the
+.I in_cleanup
+alias described below.
+.RE
+.LP
+The following are non-function values that may be used in build scripts:
+.LP
+.I in_cleanup
+.br
+.RS 2
+This alias should be considered the only safe way to test if a target was called by
+\fIclean_objects\fR.
+.br
+Returns \fBtrue\fR if the current target is in cleanup mode. Otherwise returns \fBfalse\fR.
+.RE
+.LP
+.B CURRENT_TARGET
+.br
+.RS 2
+An alias that expands to the current target name.
+.LP
+Attempting to set this will result in unspecified behaviour.
+.RE
+.LP
+.SH EXIT STATUS
+.LP
+.B d22
+exits with either a status of zero, or the return value of the target, during normal
+operation. It will return a status of one, if any built\-in functions encounter an
+error resulting in a build failure.
+.SH ALSO SEE
+.LP
+.I make(1)
+.SH AUTHOR
+.LP
+Both
+.BR d22 ,
+and this manual page, are written and maintained by T. I. "Luna" Ericson.

@@ -1,0 +1,575 @@
+#! /bin/sh
+#
+# Copyright (c) 2024 T. I. "Luna" Ericson
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to the following
+# conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all copies
+# or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+# PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
+_is_function(){
+    if type "$1" 2>/dev/null | grep -q "function"
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+_emit(){
+    if [ -z "$SILENT" ]
+    then
+        echo "$@"
+    fi
+    return 0
+}
+
+_emit_warning(){
+    if [ -z "$SILENT" ]
+    then
+        1>&2 echo "$@"
+    fi
+    return 0
+}
+
+_emit_error(){
+    1>&2 echo "$@"
+    return 0
+}
+
+# Access an array item.
+# Accepts three arguments, an array name, an index, and an optional value to
+# place at that index.
+#
+# This should be compatable with *any* POSIX shell, rather than relying on a
+# specific shell's implementation of arrays.
+_array_index(){
+    i=$2
+    i=$(( i + 1 ))
+    eval "echo \"\$$1\" | awk 'NR == '$i' {print}'"
+    if [ ! -z "$3" ]
+    then
+        eval "tmp=\"\$$1\""
+        if [ -z "$tmp" ]
+        then
+            eval "$1=\"$3\""
+        elif [ $i -le $(eval "echo \"\$$1\" | wc -l") ]
+        then
+            eval "$1=\$(echo \"\$$1\" | awk -v x=\"$3\" 'NR=='$i' {\$0=x} 1' )"
+        else
+            eval "$1=\$(echo \"\$$1\"; echo \"$3\")"
+        fi
+    fi
+    return 0
+}
+
+# An alternate way of calling array_index, but it's exclusivly for
+# writing to a specific index, and produces no output.
+_array_put(){
+    if [ -z "$3" ]
+    then
+        return 1
+    fi
+
+    _array_index "$1" "$2" "$3" > /dev/null
+    return 0
+}
+
+_array_drop(){
+    i=$2
+    i=$(( i + 1 ))
+    eval "$1=\$(echo \"\$$1\" | awk 'NR != '$i' {print}')"
+    return 0
+}
+
+_array_count(){
+    eval "tmp=\"\$$1\""
+    if [ -z "$tmp" ]
+    then
+        echo "0"
+        return 0
+    fi
+
+    eval "echo \"\$$1\" | wc -l"
+    return 0
+}
+
+# Should optimize this.
+_stack_push(){
+    _array_put "$1" $(_array_count "$1") "$2"
+    return 0
+}
+
+_stack_pop(){
+    i=$(_array_count "$1")
+    eval "echo \"\$$1\" | awk 'NR == '$i' {print}'"
+    eval "$1=\"\$(echo \"\$$1\" | awk 'NR < '$i' {print}')\""
+    return 0
+}
+
+_stack_get(){
+    eval "echo \"\$$1\" | tail -n 1"
+    return 0
+}
+
+# Accepts either two or four arguments.
+# 
+# _add_source <source_file> <object_file>
+# _add_source (-o|-O) <args> <source_file> <object_file>
+#
+#  -o  Append the options passed in $2 to $OPTS.
+#  -O  Override $OPTS with the options passed in $2.
+_add_source(){
+    if [ -z "$current_target" ]
+    then
+        _emit_error "Call for _add_source outside of any target!"
+        exit 1
+    fi
+
+    if [ "$1" = "-o" ]
+    then
+        carg="$OPTS $2 \"$3\" -o \"$4\""
+    elif [ "$1" = "-O" ]
+    then
+        carg="$2 \"$3\" -o \"$4\""
+    else
+        carg="$OPTS \"$1\" -o \"$2\""
+    fi
+    _stack_push "$(_stack_get current_target)"_sources "$carg"
+
+    return 0
+}
+
+# Function primitive.
+# Do not call directly.
+__add_target(){
+    if [ -z "$1" ]
+    then
+        _emit_error "Call for $1 outside of any target!"
+        exit 1
+    fi
+
+    if [ ! -z "$3" ] && _is_function "$3"
+    then
+        _stack_push "$(_stack_get current_target)""$2" "$3"
+    else
+        _emit_error "$1: Invalid target!"
+        return 1
+    fi
+
+    return 0
+}
+
+# Will try to build the target, but fail if unable to do so.
+_wants_target(){
+    __add_target _wants_target _wants $1
+    return $?
+}
+
+# Will fail if unable to build the target.
+_requires_target(){
+    __add_target _requires_target _requires $1
+    return $?
+}
+
+# This does the actual building, but shouldn't be called directly.
+__try_build(){
+    out=$(echo "$1" | awk 'NF > 1 {print $NF}' | tr -d '"')
+    in=$(echo "$1" | awk 'NF > 1 {print $(NF - 2)}' | tr -d '"')
+
+    if [ $2 -eq 1 ]
+    then
+        _emit "Trying wanted source $in"
+    else
+        _emit "Compiling source $in"
+    fi
+
+    # The reason the the file time comparison is redirected to /dev/null
+    # is in case we encounter a shell where file time comparisons aren't
+    # supported. In that case we give up and build the file regardless.
+    #
+    # It's not ideal, but it shouldn't be a common case.
+    #
+    # -Luna
+    if [ -e "$out" ] && [ "$out" -nt "$in" ] > /dev/null 2>&1
+    then
+        _emit "No change; Skipping source $in"
+        echo "0:$2:$out" > $PIPE
+        return 0
+    fi
+
+    if [ -z $SILENT ]
+    then
+        eval $CC $1
+    else
+        eval $CC $1 > /dev/null 2>&1
+    fi
+
+    if [ $? -ne 0 ]
+    then
+        if [ $2 -eq 1 ]
+        then
+            _emit_warning "Failed to compile wanted source $in"
+            echo "1:$2:$out" > $PIPE
+            return 1
+        else
+            _emit_error "Failed to compile source $in"
+            echo "1:$2:$out" > $PIPE
+            return 1
+        fi
+    fi
+
+    echo "0:$2:$out" > $PIPE
+    return 0
+}
+
+_build_stack(){
+    if [ -z "$current_target" ]
+    then
+        _emit_error "build_stack: No target"
+        exit 1
+    fi
+
+    # Try for the "wants" first.
+    while [ $(_array_count "$(_stack_get current_target)"_wants) -gt 0 ]
+    do
+        _stack_push current_target $(_array_index "$(_stack_get current_target)"_wants 0)
+        if [ -z $CLEANUP ]
+        then
+            _emit "Building target $(_stack_get current_target)..."
+        fi
+        $(_stack_get current_target)
+        if [ $? -ne 0 ]
+        then
+            _emit_warning "$0: Failed to execute wanted target $(_stack_get current_target)"
+            _stack_pop current_target > /dev/null
+            _array_drop "$(_stack_get current_target)"_wants 0
+        else
+            just_run="$(_stack_get current_target)"
+            _stack_pop current_target > /dev/null
+            _array_drop "$(_stack_get current_target)"_wants 0
+            _stack_push "$(_stack_get current_target)"_sources_wants "$(eval echo \"\$$(echo $just_run)_sources\")"
+            _stack_push "$(_stack_get current_target)"_objects "$(eval echo \"\$$(echo $just_run)_objects\")"
+            eval "unset $(echo $just_run)_sources $(echo $just_run)_objects $(echo $just_run)_wants $(echo $just_run)_requires"
+        fi
+    done
+
+    # Next try for the "requires".
+    while [ $(_array_count "$(_stack_get current_target)"_requires) -gt 0 ]
+    do
+        _stack_push current_target $(_array_index "$(_stack_get current_target)"_requires 0)
+        if [ -z $CLEANUP ]
+        then
+            _emit "Building target $(_stack_get current_target)..."
+        fi
+        $(_stack_get current_target)
+        if [ $? -ne 0 ]
+        then
+            _emit_error "$0: Failed to execute required target $(_stack_get current_target)"
+            exit 1
+        else
+            just_run="$(_stack_get current_target)"
+            _stack_pop current_target > /dev/null
+            _array_drop "$(_stack_get current_target)"_requires 0
+            _stack_push "$(_stack_get current_target)"_sources "$(eval echo \"\$$(echo $just_run)_sources\")"
+            _stack_push "$(_stack_get current_target)"_objects "$(eval echo \"\$$(echo $just_run)_objects\")"
+            eval "unset $(echo $just_run)_sources $(echo $just_run)_objects $(echo $just_run)_wants $(echo $just_run)_requires"
+        fi
+    done
+
+    # Do build cleanup instead of actual build.
+    # Sould never be done directly. Use _cleanup_stack instead.
+    if [ ! -z $CLEANUP ]
+    then
+        while [ $(( $(_array_count "$(_stack_get current_target)"_sources) + $(_array_count "$(_stack_get current_target)"_sources_wants) )) -gt 0 ]
+        do
+            if [ $(_array_count "$(_stack_get current_target)"_sources_wants) -gt 0 ]
+            then
+                which_object="$(_array_index $(_stack_get current_target)_sources_wants 0 | awk 'NF > 1 {print $NF}' | tr -d '"')"
+                _stack_push "$(_stack_get current_target)"_objects "$which_object"
+                _array_drop "$(_stack_get current_target)"_sources_wants 0
+            elif [ $(_array_count "$(_stack_get current_target)"_sources) -gt 0 ]
+            then
+                which_object="$(_array_index $(_stack_get current_target)_sources 0 | awk 'NF > 1 {print $NF}' | tr -d '"')"
+                _stack_push "$(_stack_get current_target)"_objects "$which_object"
+                _array_drop "$(_stack_get current_target)"_sources 0
+            fi
+        done
+        return 0
+    fi
+
+    # Open the control pipe, or die.
+    export PIPE="/tmp/$$ctrl"
+    mkfifo $PIPE
+    if [ $? -ne 0 ]
+    then
+        _emit_error "$0: Couldn't create control pipe!"
+        exit 1
+    fi
+
+    # The magic loop where all the crazy shit happens.
+    # Try not to think too much about it.
+    #
+    # -Luna
+    running=0
+    while [ $(( $(_array_count "$(_stack_get current_target)"_sources) + $(_array_count "$(_stack_get current_target)"_sources_wants) )) -gt 0 ] || [ $running -gt 0 ]
+    do
+        while [ $running -lt $JOB_MAX ]
+        do
+            if [ $(_array_count "$(_stack_get current_target)"_sources_wants) -gt 0 ]
+            then
+                which_source="$(_array_index $(_stack_get current_target)_sources_wants 0)"
+                __try_build "$which_source" 1 &
+                _array_drop "$(_stack_get current_target)"_sources_wants 0
+            elif [ $(_array_count "$(_stack_get current_target)"_sources) -gt 0 ]
+            then
+                which_source="$(_array_index $(_stack_get current_target)_sources 0)"
+                __try_build "$which_source" 0 &
+                _array_drop "$(_stack_get current_target)"_sources 0
+            else
+                break
+            fi
+            running=$(( running + 1 ))
+        done
+
+        while read -r result
+        do
+            failed=$(echo "$result" | cut -d ':' -f 1)
+            may_fail=$(echo "$result" | cut -d ':' -f 2)
+            object_file=$(echo "$result" | cut -d ':' -f 3-)
+            
+            if [ $failed -eq 0 ]
+            then
+                _emit "Ready: $object_file"
+                _stack_push "$(_stack_get current_target)"_objects "$object_file"
+            elif [ $may_fail -eq 0 ]
+            then
+                wait
+                _emit_error '$0: Failed to produce required object "'"$object_file"'"!'
+                rm -f $PIPE
+                exit 1
+            fi
+
+            running=$(( running - 1 ))
+        done < "$PIPE"
+    done
+
+    # A bit of final cleanup.
+    unset "$(_stack_get current_target)"_sources "$(_stack_get current_target)"_sources_wants
+    rm -f $PIPE
+
+    return 0
+}
+
+# I'm not happy with this function.
+# I will likely change how linking is performe in later versions.
+#
+# - Luna
+_link_stack(){
+    # If in cleanup mode, do nothing.
+    if [ ! -z $CLEANUP ]
+    then
+        return 0
+    fi
+
+    _emit "Linking $(_array_count $(_stack_get current_target)_objects) objects..."
+    while [ $(_array_count "$(_stack_get current_target)"_objects) -gt 0 ]
+    do
+        objects="\"$(_array_index $(_stack_get current_target)_objects 0)\" $objects"
+        _array_drop "$(_stack_get current_target)"_objects 0
+    done
+
+    # If the linker isn't the compiler, we can't assume what program
+    # we're using.
+    if [ "$LINKER" = "$CC" ]
+    then
+        LINK_COMMAND="$LINKER $objects $2 -o \"$1\""
+    else
+        LINK_COMMAND="$LINKER $2 \"$1\" $objects"
+    fi
+    
+    # We have to use eval, without it, the linker will complain about
+    # the quotes around the object paths.
+    # If we remove the quotes, we may get erratic behaviour if paths
+    # contain special characters.
+    if [ -z $SILENT ]
+    then
+        #eval "$LINKER $2 $objects -o \"$1\""
+        eval "$LINK_COMMAND"
+    else
+        #eval "$LINKER $2 $objects -o \"$1\" > /dev/null 2>&1"
+        eval "$LINK_COMAAND > /dev/null 2>&1"
+    fi
+
+    if [ $? -ne 0 ]
+    then
+        _emit_error "Failed to link $1"
+        exit 1
+    fi
+
+    unset objects
+    return 0
+}
+
+_clean_objects(){
+    CLEANUP="E" # It doesn't actually matter what we put here.
+
+    # With CLEANUP set, this will assemble the list of objects
+    # associated with the specified target.
+    #
+    # It will also execute any other commands in the target, so care
+    # should be taken to ensure that calling a target, and its
+    # dependencies in cleanup mode won't cause any issues.
+    _build_stack
+
+    eval "echo \"\$$(_stack_get current_target)_objects\"" | while read -r object
+    do
+        if [ -e "$object" ]
+        then
+            rm -f "$object"
+        fi
+    done
+
+    unset "$(_stack_get current_target)"_objects CLEANUP
+    return 0
+}
+
+# This may seem like a strange way of doing things, but I wanted a way
+# to seperate the internal functionality from the actual interface. This
+# makes switching out functions for testing easier, and hides details
+# of the implementation.
+#
+# -Luna
+if [ -z "$NOALIAS" ]
+then
+    # We only alias 'which' if it doesn't exist.
+    command -v which > /dev/null 2>&1 || alias which='command -v'
+
+    alias is_function='_is_function'
+
+    alias emit='_emit'
+    alias emit_warning='_emit_warning'
+    alias emit_error='_emit_error'
+
+    alias array_index='_array_index'
+    alias array_put='_array_put'
+    alias array_drop='_array_drop'
+    alias array_count='_array_count'
+
+    alias stack_push='_stack_push'
+    alias stack_pop='_stack_pop'
+    alias stack_get='_stack_get'
+
+    alias add_source='_add_source'
+    alias wants_target='_wants_target'
+    alias requires_target="_requires_target"
+    alias build_stack='_build_stack'
+    alias link_stack='_link_stack'
+    alias clean_objects='_clean_objects'
+
+    alias in_cleanup='[ ! -z "$CLEANUP" ]'
+
+    alias CURRENT_TARGET=$(_stack_get current_target)
+fi
+
+CONFLOADED=false
+
+if [ -f "/etc/d22rc" ]
+then
+    . /etc/d22rc
+    CONFLOADED=true
+fi
+
+if [ -f "$HOME/.d22rc" ]
+then
+    . "$HOME"/.d22rc
+    CONFLOADED=true
+fi
+
+if [ $CONFLOADED = false ]
+then
+    _emit_error "$0: Failed to load configuration"
+    exit 1
+fi
+
+if [ -z "$CC" ]
+then
+    if [ ! -z "$CC_PREF" ]
+    then
+        CC="$CC_PREF"
+    else
+        _emit_warning 'WARNING default $CC not set!'
+        CC=cc
+    fi
+fi
+
+if [ -z "$LINKER" ]
+then
+    LINKER="$CC"
+fi
+
+# As the name implies, we want to make sure that $JOB_MAX is
+# always a positive number, so we have this function, which
+# does just that.
+#
+# This is just to stop anyone doing anything stupid.
+#
+# -Luna
+__jobs_not_positive(){
+    test $JOB_MAX -lt 1 > /dev/null 2>&1
+    result=$?
+    if [ $result -eq 0 ] || [ $result -gt 1 ]
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+if [ -z "$JOB_MAX" ] || __jobs_not_positive
+then
+    JOB_MAX=4
+fi
+
+if [ -f ./build22 ]
+then
+    . ./build22
+else
+    _emit_error "$0: No build22 file in current directory"
+    exit 1
+fi
+
+if [ -z "$1" ]
+then
+    if _is_function target_default
+    then
+        _stack_push current_target target_default
+        target_default
+    else
+        _emit_error "$0: No default target"
+        exit 1
+    fi
+else
+    if _is_function target_"$1"
+    then
+        _stack_push current_target target_"$1"
+        target_"$1"
+    else
+        _emit_error "$0: No target for $1"
+        exit 1
+    fi
+fi
+
+exit 
