@@ -1,7 +1,7 @@
 ## D22 Build Utility
 The d22 utility is a build automation tool written in POSIX shell script, and designed to provide a flexible, yet powerful environment for building software.
 
-It is easy to pick up for anyone with shell scripting experience, as all build configurations are created as shell scripts. This also gives a develper a large amount of freedom in the behaviour of their build configurations, as any valid shell commands can be used.
+It is easy to pick up for anyone with shell scripting experience, as all build configurations are created as shell scripts. This also gives a developer a large amount of freedom in the behaviour of their build configurations, as any valid shell commands can be used.
 
 ### Early Development Disclaimer
 d22 is still in its early stages of development. While it's expected to be usable, it should not be considered stable, or complete.
