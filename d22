@@ -357,7 +357,7 @@ _build_stack(){
             elif [ $may_fail -eq 0 ]
             then
                 wait
-                _emit_error '$0: Failed to produce required object "'"$object_file"'"!'
+                _emit_error "$0"': Failed to produce required object "'"$object_file"'"!'
                 rm -f $PIPE
                 exit 1
             fi
