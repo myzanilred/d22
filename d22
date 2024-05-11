@@ -134,7 +134,7 @@ _stack_get(){
 _add_source(){
     if [ -z "$current_target" ]
     then
-        _emit_error "Call for _add_source outside of any target!"
+        _emit_error 'Call for _add_source outside of any target!'
         exit 1
     fi
 
@@ -150,6 +150,17 @@ _add_source(){
     _stack_push "$(_stack_get current_target)"_sources "$carg"
 
     return 0
+}
+
+# Adds a file as a dependency for an object.
+# If any object dependencies have changed since an object was last
+# built it will be rebuilt, regadless whether the main source has
+# changed.
+#
+# _add_object_dependency <object_file> <dependency>
+_add_object_dependency(){
+    _stack_push "$(echo $1 | tr ' .' '__')"_dependencies "$2"
+    export "$(echo $1 | tr ' .' '__')"_dependencies
 }
 
 # Function primitive.
@@ -189,25 +200,41 @@ __try_build(){
     out=$(echo "$1" | awk 'NF > 1 {print $NF}' | tr -d '"')
     in=$(echo "$1" | awk 'NF > 1 {print $(NF - 2)}' | tr -d '"')
 
-    if [ $2 -eq 1 ]
-    then
-        _emit "Trying wanted source $in"
-    else
-        _emit "Compiling source $in"
-    fi
-
-    # The reason the the file time comparison is redirected to /dev/null
+    # The reason the the file time comparisons are redirected to /dev/null
     # is in case we encounter a shell where file time comparisons aren't
     # supported. In that case we give up and build the file regardless.
     #
     # It's not ideal, but it shouldn't be a common case.
     #
     # -Luna
-    if [ -e "$out" ] && [ "$out" -nt "$in" ] > /dev/null 2>&1
+    while [ -e "$out" ] && [ $(_array_count "$(echo $out | tr ' .' '__')"_dependencies) -gt 0 ]
+    do
+        dep_file="$(_stack_get "$(echo $out | tr ' .' '__')"_dependencies)"
+        _stack_pop "$(echo $out | tr ' .' '__')"_dependencies > /dev/null
+
+        if [ ! -e "$dep_file" ]
+        then
+            _emit_warning "Missing object dependency \"$dep_file\""
+        elif [ "$out" -ot "$dep_file" ] > /dev/null 2>&1
+        then
+            dep_change='!'
+            _emit "Dependency \"$dep_file\" for object \"$out\" changed."
+            break;
+        fi
+    done
+
+    if [ -e "$out" ] && [ -z "$dep_change" ] && [ "$out" -nt "$in" ] > /dev/null 2>&1
     then
         _emit "No change; Skipping source $in"
         echo "0:$2:$out" > $PIPE
         return 0
+    fi
+
+    if [ $2 -eq 1 ]
+    then
+        _emit "Trying wanted source $in"
+    else
+        _emit "Compiling source $in"
     fi
 
     if [ -z $SILENT ]
@@ -473,6 +500,7 @@ then
     alias stack_get='_stack_get'
 
     alias add_source='_add_source'
+    alias add_object_dependency='_add_object_dependency'
     alias wants_target='_wants_target'
     alias requires_target="_requires_target"
     alias build_stack='_build_stack'
