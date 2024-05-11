@@ -155,7 +155,7 @@ _add_source(){
 # Function primitive.
 # Do not call directly.
 __add_target(){
-    if [ -z "$1" ]
+    if [ -z "$current_target" ]
     then
         _emit_error "Call for $1 outside of any target!"
         exit 1
