@@ -239,6 +239,14 @@ option appends \fBARGS\fR to the arguments specified by \fBOPTS\fR. If \fB\-O\fR
 \fBARGS\fR will override \fBOPTS\fR.
 .RE
 .LP
+.I add_object_dependency \fB[OBJECT] [DEPENDENCY]\fR
+.br
+.RS 2
+Adds a file \fBDEPENDENCY\fR as a dependency to the compiled object, \fBOBJECT\fR. This
+indicates to \fBd22\fR that this file should be checked before compiling \fBOBJECT\fR to
+determine if an object should be rebuilt.
+.RE
+.LP
 .I wants_target \fB[TARGET]\fR
 .br
 .I requires_target \fB[TARGET]\fR

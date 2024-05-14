@@ -82,6 +82,9 @@ Currently d22 provides the following functions for managing sources, targets, an
 This function adds a source to the current target's source dependency list. The *Object* argument should be the name of the object produced by the compilation of *Source*.  
 If **add_source** is called with either *\-o* or *\-O* then the optional argument *Args* will be passed to the compiler when compiling *Source*. The *\-o* option will append *Args* to $OPTS, while *\-O* will override $OPTS with the value of *Args*.
 
+* **add_object_dependancy <Object\> <Dependency\>**  
+This function adds the file *Dependency* as a dependency for an object file, *Object*. Before d22 goes to compile *Object*, it will check all dependencies for changes before determining whether an object should be recompiled.
+
 * **wants_target <Target\>**
 
 * **requires_target <Target\>**  
