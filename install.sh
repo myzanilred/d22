@@ -12,7 +12,7 @@ then
         echo "Removing D22..."
         rm -f "$TDIR/d22" 2&> /dev/null
         rm -f "/usr/share/man/man1/d22.1" 2&> /dev/null
-        rm -f "/etc/d22" 2&> /dev/null
+        rm -f "/etc/d22rc" 2&> /dev/null
         echo "Done."
         exit 0
     else
