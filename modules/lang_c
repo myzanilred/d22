@@ -1,0 +1,29 @@
+# Get the full path to a file.
+# The second argument allows you too look at the path of one file
+# relative to another.
+__get_full_path(){(
+    if [ ! -z "$2" ]
+    then
+        cd "$(dirname ""$2"")"
+    fi
+
+    rel_path="$(dirname ""$1"")"
+
+    cd "$rel_path"
+    echo "$(pwd)/$(basename ""$1"")"
+)}
+
+__auto_dependency(){
+    # This is a cheat. It only works because of the generic array implementation.
+    # It will need to be changed for shell modules to be reliable.
+    # 
+    # -Luna
+    local_include=$(grep '#include "' "$1" | grep -o '".*\.h"' | tr -d '"')
+
+    while [ $(array_count local_include) -gt 0 ]
+    do
+        full_path=$(__get_full_path "$(stack_get local_include)" "$1")
+        add_object_dependency "$2" "$full_path"
+        stack_pop local_include > /dev/null
+    done
+}

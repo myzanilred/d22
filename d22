@@ -200,6 +200,15 @@ __try_build(){
     out=$(echo "$1" | awk 'NF > 1 {print $NF}' | tr -d '"')
     in=$(echo "$1" | awk 'NF > 1 {print $(NF - 2)}' | tr -d '"')
 
+    # Execute automatic dependency detenction, if it's available.
+    if _is_function __auto_dependency 
+    then
+        __auto_dependency "$in" "$out"
+    elif [ ! -z "$LANG_MOD" ]
+    then
+        _emit_warning "$0: No automatic file dependency detection defined for current LANG_MOD."
+    fi
+
     # The reason the the file time comparisons are redirected to /dev/null
     # is in case we encounter a shell where file time comparisons aren't
     # supported. In that case we give up and build the file regardless.
@@ -577,6 +586,23 @@ then
 else
     _emit_error "$0: No build22 file in current directory"
     exit 1
+fi
+
+if [ ! -z "$LANG_MOD" ]
+then
+    if [ -e "$HOME"/.d22/modules/lang_"$LANG_MOD" ]
+    then
+        _emit "Using local language module $LANG_MOD"
+        . "$HOME"/.d22/modules/lang_"$LANG_MOD"
+    elif [ -e /etc/d22/modules/lang_"$LANG_MOD" ]
+    then
+        _emit "Using language module $LANG_MOD"
+        . /etc/d22/modules/lang_"$LANG_MOD"
+    else
+        _emit_warning "$0: No language module for \"$LANG_MOD\""
+    fi
+else
+    _emit "Running in language agnostic mode."
 fi
 
 if [ -z "$1" ]

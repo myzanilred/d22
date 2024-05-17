@@ -114,6 +114,17 @@ This is the maximum number of concurrent jobs that d22 may start while bulding s
 files.
 .RE
 .LP
+.B LANG_MOD
+.br
+.RS 2
+Sets the language module for d22 to use.
+.LP
+d22 will search for modules in either the global location, \fB/etc/d22/modules\fR, or
+locally in \fI$HOME\fR\fB/.d22/modules\fR. Local modules take precedence.
+.LP
+The language module should be set by a projects build script.
+.RE
+.LP
 .B NOALIAS
 .br
 .RS 2

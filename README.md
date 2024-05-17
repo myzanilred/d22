@@ -56,6 +56,10 @@ NOTE: This option defaults to the same value as $CC. There is normally no reason
 Sets the maximum number of concurrent compile jobs that d22 may start at once.  
 NOTE: If a dependency for a target calls **build_stack** it will start its own build session. A build session is limited by the number of sources included by the target, and its dependencies. In other words, if a dependency for a target has only one or two sources and calls **build_stack**, the number of jobs will be limited to the two or three sources of the dependency, even if the originating target has many more sources, and regardless of the value of $JOB\_MAX.
 
+* **LANG_MOD=<Module Name\>**  
+Sets the language module that d22 should use. d22 will search for modules either globally, in **/etc/d22/modules/**, or locally in **$HOME/.d22/modules/**, with the latter taking precedence. This should be set by the build script of a project, based on the languge the project uses.  
+NOTE: For further details on modules, please read the module specific documentation.
+
 * **SILENT=<Any non-empty value\>**  
 If this value is set, d22 will suppress non-fatal messages.  
 NOTE: Later versions of d22 should provide a flag to set this automatically.

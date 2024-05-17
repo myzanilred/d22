@@ -13,6 +13,7 @@ then
         rm -f "$TDIR/d22" 2&> /dev/null
         rm -f "/usr/share/man/man1/d22.1" 2&> /dev/null
         rm -f "/etc/d22rc" 2&> /dev/null
+        rm -rf "/etc/d22" 2&> /dev/null
         echo "Done."
         exit 0
     else
@@ -25,6 +26,7 @@ then
         rm -f "$TDIR/d22" 2&> /dev/null
         rm -f "$HOME/share/man/man1/d22.1" 2&> /dev/null
         rm -f "$HOME/.d22rc" 2&> /dev/null
+        rm -rf "$HOME/.d22" 2&> /dev/null
         echo "Done."
         exit 0
     fi
@@ -40,7 +42,9 @@ then
     echo "Installing d22 in \"$TDIR\""
     if install -m 755 ./d22 "$TDIR/d22" &&
        install -m 644 ./doc/d22.1 /usr/share/man/man1/d22.1 &&
-       install -m 644 /dev/null /etc/d22rc
+       install -m 644 /dev/null /etc/d22rc &&
+       mkdir -p /etc/d22/modules &&
+       install -m 644 ./modules/lang_c /etc/d22/modules/lang_c
     then
         echo "CC_PREF=gcc" > /etc/d22rc
         echo "Done."
@@ -68,9 +72,13 @@ else
            ;;
     esac
 
-    if install -D -m 750 ./d22 "$TDIR/d22" &&
-       install -D -m 640 ./doc/d22.1 "$HOME/.local/share/man/man1" &&
-       install -m 640 /dev/null "$HOME/.d22rc"
+    if mkdir -p "$TDIR" &&
+       install -m 750 ./d22 "$TDIR/d22" &&
+       mkdir -p "$HOME/.local/share/man"
+       install -m 640 ./doc/d22.1 "$HOME/.local/share/man/man1" &&
+       install -m 640 /dev/null "$HOME/.d22rc" &&
+       mkdir -p "$HOME/.d22/modules" &&
+       install -m 640 ./modules/lang_c "$HOME/.d22/modules/lang_c"
     then
         echo "CC_PREF=gcc" > "$HOME/.d22rc"
         echo "Done."
