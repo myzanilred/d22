@@ -1,0 +1,61 @@
+.TH D22_MODULES 5  "17 May 2024" "\e0" "GUTS"
+.SH NAME
+d22 modules \- Module files used by the d22 build utility
+.SH SYNOPSIS
+.B /etc/d22/modules/*
+.br
+.B ~/.d22/modules/*
+.SH DESCRIPTION
+.LP
+The files contained under the \fB/etc/d22/modules/\fR and \fI$HOME\fR\fB/.d22/modules/\fR
+directories are used to provide aditional functionality to, or modify the existing
+functionality of, the \fBd22(1)\fR build utility.
+.LP
+d22 uses two types of modules:
+.LP
+.B Language Modules
+.br
+.RS 2
+Language modules provide special, language-specific features. They have file names of
+\fIlang_<name>\fR, where \fIname\fR is the name of the module. They should be set by a
+project's build script, when it is first loaded, using the \fI$LANG_MOD\fR variable.
+.RE
+.LP
+.B Shell Modules
+.br
+.RS 2
+Shell modules are intended to enhance the functionality of d22 by replacing, or extending
+the existing POSIX shell implementations of various functions with implementations that
+take advantage of the features provided by more advanced, feature-rich shells, such as
+ksh, bash, and zsh.
+.RE
+.LP
+.SH OPTIONS
+.LP
+.SS Language Module Definitions
+Language modules should be written under the same constraints as the main d22 script.
+They should rely only on shell features which are defined by the POSIX standard, or on
+the functions provided by d22 itself. The use of any non-standard functionality could
+break compatibility in some environments.
+.LP
+Language modules currently expect the following functions to be defined:
+.LP
+.I __auto_dependency \fB[SOURCE] [OBJECT]\fR
+.RS 2
+This function is called before the file \fBSOURCE\fR is compiled to the file \fBOBJECT\fR.
+It is expected to read \fBSOURCE\fR and determine if there are any additional files which
+should be checked for changes before proceeding to compile \fBOBJECT\fR, and add them to
+the dependencies for \fBOBJECT\fR using \fIadd_object_dependency\fR (See
+\fBd22(1)\fR).
+.RE
+.LP
+.SS Shell Module Definitions
+Shell module support will be added in a later update.
+.LP
+.SH ALSO SEE
+.I d22(1)
+.SH AUTHOR
+.LP
+Both
+.BR d22 ,
+and this manual page, are written and maintained by T. I. "Luna" Ericson.
